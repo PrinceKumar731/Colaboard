@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  judge-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: judge-backend
+    ports:
+      - "8080:8080"
+    volumes:
+      # Share the host temp dir so the backend can mount submission dirs into sandbox containers
+      - /tmp/judge:/tmp/judge
+      # Mount Docker socket so the backend can spin up sibling containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      JUDGE_DOCKER_JAVA_IMAGE: judge-java:latest
+      JUDGE_DOCKER_PYTHON_IMAGE: judge-python:latest
+      JUDGE_DOCKER_CPP_IMAGE: judge-cpp:latest
+      JUDGE_EXECUTION_TEMP_DIR: /tmp/judge
+      JUDGE_QUEUE_WORKERS: "3"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

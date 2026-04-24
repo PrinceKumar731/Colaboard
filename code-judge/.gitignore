@@ -1,0 +1,32 @@
+# Maven
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temp execution dirs
+/tmp/judge/
+
+# H2 persisted DB (if ever switched from mem)
+*.db
+*.mv.db
+*.trace.db
+
+# Environment
+.env
+*.env.local
