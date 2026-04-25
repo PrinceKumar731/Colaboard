@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(java -version)",
+      "Bash(mvn -version)",
+      "Bash(mkdir -p \"C:/Users/Prince Kumar/desktop/projects/collaborative-whiteboard/spring-backend/src/main/java/com/colaboard/config\")",
+      "Bash(mkdir -p \"C:/Users/Prince Kumar/desktop/projects/collaborative-whiteboard/spring-backend/src/main/java/com/colaboard/controller\")",
+      "Bash(mkdir -p \"C:/Users/Prince Kumar/desktop/projects/collaborative-whiteboard/spring-backend/src/main/java/com/colaboard/model\")",
+      "Bash(mkdir -p \"C:/Users/Prince Kumar/desktop/projects/collaborative-whiteboard/spring-backend/src/main/java/com/colaboard/service\")",
+      "Bash(mkdir -p \"C:/Users/Prince Kumar/desktop/projects/collaborative-whiteboard/spring-backend/src/main/resources\")",
+      "Bash(mvn compile *)",
+      "Bash(cat)",
+      "Bash(chmod +x /tmp/fix_msgs.sh)"
+    ]
+  }
+}

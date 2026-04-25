@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
+import { Client } from '@stomp/stompjs';
 import Toolbar from './Toolbar';
 import { drawSegment, replayHistory } from '../utils/canvas';
 
 export default function Whiteboard({ roomId }) {
   const canvasRef = useRef(null);
-  const socketRef = useRef(null);
+  const stompRef = useRef(null);
   const isDrawingRef = useRef(false);
   const prevPosRef = useRef(null);
   const ctxRef = useRef(null);
+  const mySessionRef = useRef(null);
 
   const [tool, setTool] = useState('pen');
   const [color, setColor] = useState('#000000');
@@ -16,6 +17,7 @@ export default function Whiteboard({ roomId }) {
   const [userCount, setUserCount] = useState(1);
   const [cursors, setCursors] = useState({});
   const [copied, setCopied] = useState(false);
+  const [connected, setConnected] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -26,39 +28,65 @@ export default function Whiteboard({ roomId }) {
   }, []);
 
   useEffect(() => {
-    const socket = io();
-    socketRef.current = socket;
+    const client = new Client({
+      brokerURL: 'ws://localhost:8080/ws',
+      reconnectDelay: 3000,
 
-    socket.emit('join-room', roomId);
+      onConnect: () => {
+        setConnected(true);
 
-    socket.on('canvas-state', (history) => {
-      if (ctxRef.current) replayHistory(ctxRef.current, history);
+        // Receive own session ID (for filtering self-cursor)
+        client.subscribe('/user/queue/session', (msg) => {
+          mySessionRef.current = msg.body;
+        });
+
+        // Receive canvas history on join
+        client.subscribe('/user/queue/canvas-state', (msg) => {
+          const history = JSON.parse(msg.body);
+          if (ctxRef.current) replayHistory(ctxRef.current, history);
+        });
+
+        client.subscribe(`/topic/room/${roomId}/draw`, (msg) => {
+          const segment = JSON.parse(msg.body);
+          if (ctxRef.current) drawSegment(ctxRef.current, segment);
+        });
+
+        client.subscribe(`/topic/room/${roomId}/cursor`, (msg) => {
+          const { sessionId, x, y } = JSON.parse(msg.body);
+          if (sessionId === mySessionRef.current) return;
+          setCursors((prev) => ({ ...prev, [sessionId]: { x, y } }));
+        });
+
+        client.subscribe(`/topic/room/${roomId}/cursor-leave`, (msg) => {
+          const sessionId = msg.body;
+          setCursors((prev) => {
+            const next = { ...prev };
+            delete next[sessionId];
+            return next;
+          });
+        });
+
+        client.subscribe(`/topic/room/${roomId}/users`, (msg) => {
+          setUserCount(Number(msg.body));
+        });
+
+        client.subscribe(`/topic/room/${roomId}/clear`, () => {
+          const canvas = canvasRef.current;
+          if (ctxRef.current) ctxRef.current.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        // Join the room after all subscriptions are set up
+        client.publish({ destination: `/app/room/${roomId}/join`, body: '' });
+      },
+
+      onDisconnect: () => setConnected(false),
+      onStompError: (frame) => console.error('STOMP error', frame),
     });
 
-    socket.on('draw', (segment) => {
-      if (ctxRef.current) drawSegment(ctxRef.current, segment);
-    });
+    client.activate();
+    stompRef.current = client;
 
-    socket.on('clear', () => {
-      const canvas = canvasRef.current;
-      if (ctxRef.current) ctxRef.current.clearRect(0, 0, canvas.width, canvas.height);
-    });
-
-    socket.on('cursor', ({ id, x, y }) => {
-      setCursors((prev) => ({ ...prev, [id]: { x, y } }));
-    });
-
-    socket.on('cursor-leave', (id) => {
-      setCursors((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-    });
-
-    socket.on('room-users', setUserCount);
-
-    return () => socket.disconnect();
+    return () => client.deactivate();
   }, [roomId]);
 
   const getPos = (e) => {
@@ -76,7 +104,13 @@ export default function Whiteboard({ roomId }) {
   const handleMouseMove = (e) => {
     e.preventDefault();
     const pos = getPos(e);
-    socketRef.current?.emit('cursor', { roomId, x: pos.x, y: pos.y });
+
+    if (stompRef.current?.connected) {
+      stompRef.current.publish({
+        destination: `/app/room/${roomId}/cursor`,
+        body: JSON.stringify({ x: pos.x, y: pos.y }),
+      });
+    }
 
     if (!isDrawingRef.current || !prevPosRef.current) return;
 
@@ -87,11 +121,18 @@ export default function Whiteboard({ roomId }) {
       y: pos.y,
       color,
       lineWidth,
-      tool
+      tool,
     };
 
     drawSegment(ctxRef.current, segment);
-    socketRef.current?.emit('draw', { roomId, segment });
+
+    if (stompRef.current?.connected) {
+      stompRef.current.publish({
+        destination: `/app/room/${roomId}/draw`,
+        body: JSON.stringify(segment),
+      });
+    }
+
     prevPosRef.current = pos;
   };
 
@@ -103,7 +144,9 @@ export default function Whiteboard({ roomId }) {
   const handleClear = () => {
     const canvas = canvasRef.current;
     ctxRef.current.clearRect(0, 0, canvas.width, canvas.height);
-    socketRef.current?.emit('clear', roomId);
+    if (stompRef.current?.connected) {
+      stompRef.current.publish({ destination: `/app/room/${roomId}/clear`, body: '' });
+    }
   };
 
   const copyLink = () => {
@@ -119,6 +162,7 @@ export default function Whiteboard({ roomId }) {
           <span className="app-title">Whiteboard</span>
           <span className="room-badge">Room: {roomId}</span>
           <span className="online-indicator">{userCount} online</span>
+          {!connected && <span style={{ fontSize: 11, color: '#ef4444' }}>Connecting…</span>}
         </div>
         <button className="share-btn" onClick={copyLink}>
           {copied ? 'Link Copied!' : 'Share Room'}

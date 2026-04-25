@@ -2,3 +2,7 @@ node_modules/
 client/dist/
 .env
 *.log
+
+# Maven
+spring-backend/target/
+spring-backend/.mvn/repository/
