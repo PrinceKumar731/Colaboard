@@ -5,6 +5,18 @@ function randomRoomId() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+function resolveRoomInput(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.searchParams.get('room')?.trim().toUpperCase() ?? '';
+  } catch {
+    return trimmed.toUpperCase();
+  }
+}
+
 export default function App() {
   const [activeRoom, setActiveRoom] = useState(null);
   const [joinInput, setJoinInput] = useState('');
@@ -12,11 +24,12 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const room = params.get('room');
-    if (room) setActiveRoom(room.toUpperCase());
+    if (room) setActiveRoom(resolveRoomInput(room));
   }, []);
 
   const enterRoom = (roomId) => {
-    const nextRoomId = roomId.toUpperCase();
+    const nextRoomId = resolveRoomInput(roomId);
+    if (!nextRoomId) return;
     const url = new URL(window.location.href);
     url.searchParams.set('room', nextRoomId);
     window.history.pushState({}, '', url);
@@ -27,7 +40,7 @@ export default function App() {
 
   const handleJoin = (event) => {
     event.preventDefault();
-    const roomId = joinInput.trim().toUpperCase();
+    const roomId = resolveRoomInput(joinInput);
     if (roomId) enterRoom(roomId);
   };
 
