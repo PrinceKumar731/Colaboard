@@ -45,6 +45,7 @@ export default function Whiteboard({ roomId }) {
   const [cursors, setCursors] = useState({});
   const [copied, setCopied] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
 
@@ -434,37 +435,20 @@ export default function Whiteboard({ roomId }) {
     );
   };
 
-  const activeHint = {
-    pen: 'Sketch freehand with pressure-style strokes.',
-    line: 'Click and drag for clean straight segments.',
-    arrow: 'Draw connections and directional flows.',
-    rectangle: 'Build frames, cards, and boxes.',
-    ellipse: 'Use for callouts, avatars, and highlights.',
-    diamond: 'Great for flowchart decisions.',
-    eraser: 'Scrub away parts of the board.',
-  }[tool];
-
   return (
     <div className="board-shell">
       <header className="board-header">
-        <div className="brand-block">
-          <div className="brand-kicker">Colaboard</div>
-          <div className="brand-title-row">
-            <h1>Sketch together in real time</h1>
-            <span className={`status-pill${connected ? ' online' : ''}`}>
-              {connected ? 'Live sync on' : 'Connecting'}
-            </span>
-          </div>
+        <div className="board-header-left">
+          <button type="button" className="header-icon-btn" aria-label="Menu">
+            ☰
+          </button>
+          <div className="brand-chip">Colaboard</div>
         </div>
 
         <div className="header-actions">
-          <div className="room-meta">
-            <span>Room</span>
-            <strong>{roomId}</strong>
-            <em>{userCount} collaborator{userCount === 1 ? '' : 's'}</em>
-          </div>
-          <button type="button" className="share-btn" onClick={copyLink}>
-            {copied ? 'Link copied' : 'Share room'}
+          <div className={`status-dot${connected ? ' online' : ''}`} title={connected ? 'Live sync on' : 'Connecting'} />
+          <button type="button" className="share-btn" onClick={() => setShareOpen(true)}>
+            Share
           </button>
         </div>
       </header>
@@ -486,22 +470,11 @@ export default function Whiteboard({ roomId }) {
         <section className="canvas-stage-wrap">
           <div className="canvas-stage" ref={canvasAreaRef}>
             <div className="canvas-topbar">
-              <div className="tool-summary">
-                <span className="tool-summary-label">Active tool</span>
-                <strong>{tool}</strong>
-                <p>{activeHint}</p>
-              </div>
-              <div className="tool-summary">
-                <span className="tool-summary-label">Viewport</span>
-                <strong>{Math.round(viewport.zoom * 100)}% zoom</strong>
-                <p>Wheel to pan, Ctrl plus wheel to zoom, or hold Space and drag to move around.</p>
-              </div>
               <div className="viewport-controls">
                 <button type="button" onClick={() => stepZoom(-1)}>-</button>
+                <strong>{Math.round(viewport.zoom * 100)}%</strong>
                 <button type="button" onClick={() => stepZoom(1)}>+</button>
-                <button type="button" className="viewport-reset" onClick={centerViewport}>
-                  Reset view
-                </button>
+                <button type="button" className="viewport-reset" onClick={centerViewport}>Reset</button>
               </div>
             </div>
 
@@ -543,6 +516,52 @@ export default function Whiteboard({ roomId }) {
           </div>
         </section>
       </main>
+
+      {shareOpen && (
+        <div className="modal-backdrop" onClick={() => setShareOpen(false)}>
+          <div className="share-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="share-modal-head">
+              <div>
+                <h2>Start a live session</h2>
+                <p>Share this link so others can join your board instantly.</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setShareOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="share-room-badge">
+              <span>Room</span>
+              <strong>{roomId}</strong>
+              <em>{userCount} collaborator{userCount === 1 ? '' : 's'}</em>
+            </div>
+
+            <div className="share-link-box">{window.location.href}</div>
+
+            <div className="share-modal-actions">
+              <button
+                type="button"
+                className="share-btn primary"
+                onClick={copyLink}
+              >
+                {copied ? 'Copied' : 'Copy link'}
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => setShareOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
