@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Whiteboard from './components/Whiteboard';
 
 function randomRoomId() {
@@ -12,51 +12,73 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const room = params.get('room');
-    if (room) setActiveRoom(room);
+    if (room) setActiveRoom(room.toUpperCase());
   }, []);
 
-  const enterRoom = (id) => {
+  const enterRoom = (roomId) => {
+    const nextRoomId = roomId.toUpperCase();
     const url = new URL(window.location.href);
-    url.searchParams.set('room', id);
+    url.searchParams.set('room', nextRoomId);
     window.history.pushState({}, '', url);
-    setActiveRoom(id);
+    setActiveRoom(nextRoomId);
   };
 
   const handleCreate = () => enterRoom(randomRoomId());
 
-  const handleJoin = (e) => {
-    e.preventDefault();
-    const id = joinInput.trim().toUpperCase();
-    if (id) enterRoom(id);
+  const handleJoin = (event) => {
+    event.preventDefault();
+    const roomId = joinInput.trim().toUpperCase();
+    if (roomId) enterRoom(roomId);
   };
 
-  if (activeRoom) return <Whiteboard roomId={activeRoom} />;
+  if (activeRoom) {
+    return <Whiteboard roomId={activeRoom} />;
+  }
 
   return (
-    <div className="landing">
-      <div className="landing-card">
-        <div className="landing-icon">&#9634;</div>
-        <h1>Collaborative Whiteboard</h1>
-        <p>Draw together in real time. Create a room and share the link with anyone.</p>
+    <div className="landing-shell">
+      <div className="landing-noise" />
+      <section className="hero-panel">
+        <div className="hero-copy">
+          <span className="eyebrow">Collaborative whiteboard</span>
+          <h1>Turn this board into your team&apos;s live sketch room.</h1>
+          <p>
+            Fast room sharing, Excalidraw-inspired tools, and real-time collaboration on a
+            spacious canvas made for rough ideas.
+          </p>
 
-        <button className="btn-create" onClick={handleCreate}>
-          Create New Room
-        </button>
-
-        <div className="or-divider">
-          <span>or join existing</span>
+          <div className="hero-actions">
+            <button type="button" className="primary-cta" onClick={handleCreate}>
+              Create room
+            </button>
+            <form className="join-room-form" onSubmit={handleJoin}>
+              <input
+                value={joinInput}
+                onChange={(event) => setJoinInput(event.target.value)}
+                placeholder="Enter room code"
+                spellCheck={false}
+              />
+              <button type="submit">Join</button>
+            </form>
+          </div>
         </div>
 
-        <form className="join-form" onSubmit={handleJoin}>
-          <input
-            value={joinInput}
-            onChange={(e) => setJoinInput(e.target.value)}
-            placeholder="Enter Room ID"
-            spellCheck={false}
-          />
-          <button type="submit">Join</button>
-        </form>
-      </div>
+        <div className="hero-preview">
+          <div className="preview-card sticky">
+            <span className="preview-label">Feels like</span>
+            <strong>Loose, visual, and collaborative</strong>
+            <p>
+              Pencil, arrows, rectangles, ellipses, diamonds, eraser, export, and room-level
+              sync all in one board.
+            </p>
+          </div>
+          <div className="preview-card">
+            <span className="preview-label">Best for</span>
+            <strong>Flows, architecture, notes, quick wireframes</strong>
+            <p>Share one link, jump into a room, and sketch together immediately.</p>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

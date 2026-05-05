@@ -10,7 +10,9 @@
       "Bash(mkdir -p \"C:/Users/Prince Kumar/desktop/projects/collaborative-whiteboard/spring-backend/src/main/resources\")",
       "Bash(mvn compile *)",
       "Bash(cat)",
-      "Bash(chmod +x /tmp/fix_msgs.sh)"
+      "Bash(chmod +x /tmp/fix_msgs.sh)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter '/tmp/fix_msgs.sh' -- --all)",
+      "Bash(xargs -r git update-ref -d)"
     ]
   }
 }
