@@ -14,8 +14,6 @@ const FILL_CHOICES = [
   { id: 'solid', label: 'Solid' },
 ];
 
-const WIDTH_CHOICES = [2, 4, 8];
-
 export default function Toolbar({
   tool,
   color,
@@ -26,7 +24,6 @@ export default function Toolbar({
   onFillStyleChange,
   onLineWidthChange,
   onClear,
-  onExport,
 }) {
   return (
     <>
@@ -83,25 +80,17 @@ export default function Toolbar({
 
         <div className="dock-section">
           <span className="dock-label">Width</span>
-          <div className="width-chip-row">
-            {WIDTH_CHOICES.map((width) => (
-              <button
-                key={width}
-                type="button"
-                className={`width-chip${lineWidth === width ? ' active' : ''}`}
-                onClick={() => onLineWidthChange(width)}
-                aria-label={`Stroke width ${width}`}
-              >
-                <span style={{ height: Math.max(2, width) }} />
-              </button>
-            ))}
-          </div>
+          <input
+            className="size-slider compact"
+            type="range"
+            min="1"
+            max="18"
+            value={lineWidth}
+            onChange={(event) => onLineWidthChange(Number(event.target.value))}
+          />
         </div>
 
         <div className="dock-actions">
-          <button type="button" className="mini-action" onClick={onExport} title="Export PNG">
-            ⤓
-          </button>
           <button type="button" className="mini-action danger" onClick={onClear} title="Clear board">
             ✕
           </button>

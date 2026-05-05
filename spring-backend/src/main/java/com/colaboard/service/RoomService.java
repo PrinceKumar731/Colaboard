@@ -13,33 +13,38 @@ public class RoomService {
     // roomId -> list of draw segments
     private final Map<String, List<DrawSegment>> roomHistory = new ConcurrentHashMap<>();
 
-    // principalName -> roomId  (for disconnect cleanup)
-    private final Map<String, String> principalRoom = new ConcurrentHashMap<>();
+    // websocket sessionId -> session info
+    private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
 
-    // roomId -> set of principalNames
-    private final Map<String, Set<String>> roomPrincipals = new ConcurrentHashMap<>();
+    // roomId -> set of websocket sessionIds
+    private final Map<String, Set<String>> roomSessions = new ConcurrentHashMap<>();
 
-    public void addSession(String roomId, String principalName) {
-        principalRoom.put(principalName, roomId);
-        roomPrincipals.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet()).add(principalName);
+    public void addSession(String roomId, String sessionId, String clientId) {
+        sessions.put(sessionId, new SessionInfo(roomId, clientId));
+        roomSessions.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
         roomHistory.computeIfAbsent(roomId, k -> new CopyOnWriteArrayList<>());
     }
 
-    public String removeSession(String principalName) {
-        String roomId = principalRoom.remove(principalName);
-        if (roomId != null) {
-            Set<String> principals = roomPrincipals.get(roomId);
-            if (principals != null) principals.remove(principalName);
+    public SessionInfo removeSession(String sessionId) {
+        SessionInfo info = sessions.remove(sessionId);
+        if (info != null) {
+            Set<String> activeSessions = roomSessions.get(info.getRoomId());
+            if (activeSessions != null) {
+                activeSessions.remove(sessionId);
+                if (activeSessions.isEmpty()) {
+                    roomSessions.remove(info.getRoomId());
+                }
+            }
         }
-        return roomId;
+        return info;
     }
 
-    public String getRoomForPrincipal(String principalName) {
-        return principalRoom.get(principalName);
+    public SessionInfo getSessionInfo(String sessionId) {
+        return sessions.get(sessionId);
     }
 
     public List<DrawSegment> getHistory(String roomId) {
-        return roomHistory.getOrDefault(roomId, Collections.emptyList());
+        return List.copyOf(roomHistory.getOrDefault(roomId, Collections.emptyList()));
     }
 
     public void addToHistory(String roomId, DrawSegment segment) {
@@ -52,7 +57,25 @@ public class RoomService {
     }
 
     public int getUserCount(String roomId) {
-        Set<String> principals = roomPrincipals.get(roomId);
-        return principals != null ? principals.size() : 0;
+        Set<String> activeSessions = roomSessions.get(roomId);
+        return activeSessions != null ? activeSessions.size() : 0;
+    }
+
+    public static class SessionInfo {
+        private final String roomId;
+        private final String clientId;
+
+        public SessionInfo(String roomId, String clientId) {
+            this.roomId = roomId;
+            this.clientId = clientId;
+        }
+
+        public String getRoomId() {
+            return roomId;
+        }
+
+        public String getClientId() {
+            return clientId;
+        }
     }
 }

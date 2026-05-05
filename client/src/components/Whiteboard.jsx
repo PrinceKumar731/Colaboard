@@ -19,7 +19,9 @@ function withAlpha(hex, alpha) {
 
 function createWsUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.hostname}:8080/ws`;
+  const url = new URL('/ws', window.location.href);
+  url.protocol = protocol;
+  return url.toString();
 }
 
 export default function Whiteboard({ roomId }) {
@@ -110,6 +112,11 @@ export default function Whiteboard({ roomId }) {
         });
 
         client.subscribe('/user/queue/canvas-state', (message) => {
+          elementsRef.current = JSON.parse(message.body);
+          renderScene(null);
+        });
+
+        client.subscribe(`/topic/room/${roomId}/state`, (message) => {
           elementsRef.current = JSON.parse(message.body);
           renderScene(null);
         });
@@ -447,6 +454,9 @@ export default function Whiteboard({ roomId }) {
 
         <div className="header-actions">
           <div className={`status-dot${connected ? ' online' : ''}`} title={connected ? 'Live sync on' : 'Connecting'} />
+          <button type="button" className="ghost-btn" onClick={handleExport}>
+            Download
+          </button>
           <button type="button" className="share-btn" onClick={() => setShareOpen(true)}>
             Share
           </button>
@@ -464,7 +474,6 @@ export default function Whiteboard({ roomId }) {
           onFillStyleChange={setFillStyle}
           onLineWidthChange={setLineWidth}
           onClear={handleClear}
-          onExport={handleExport}
         />
 
         <section className="canvas-stage-wrap">

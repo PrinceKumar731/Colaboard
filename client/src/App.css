@@ -382,7 +382,6 @@ button {
 
 .swatch-row,
 .compact-pill-row,
-.width-chip-row,
 .dock-actions {
   display: flex;
   flex-wrap: wrap;
@@ -424,26 +423,9 @@ button {
   color: var(--ink);
 }
 
-.width-chip {
-  width: 42px;
-  height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.85);
-}
-
-.width-chip span {
-  width: 16px;
-  border-radius: 999px;
-  background: #1f2937;
-}
-
-.width-chip.active {
-  border-color: rgba(255, 122, 89, 0.28);
-  background: var(--accent-soft);
+.size-slider.compact {
+  width: 100%;
+  accent-color: var(--accent);
 }
 
 .mini-action {
@@ -458,6 +440,10 @@ button {
 
 .mini-action.danger {
   color: #b91c1c;
+}
+
+.dock-actions {
+  justify-content: flex-end;
 }
 
 .canvas-stage-wrap {

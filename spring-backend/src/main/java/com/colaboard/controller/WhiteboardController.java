@@ -12,6 +12,7 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
+import org.springframework.web.socket.messaging.StompHeaderAccessor;
 
 import java.util.List;
 
@@ -26,15 +27,17 @@ public class WhiteboardController {
 
     @MessageMapping("/room/{roomId}/join")
     public void join(@DestinationVariable String roomId, SimpMessageHeaderAccessor accessor) {
-        String principal = accessor.getUser().getName();
-        roomService.addSession(roomId, principal);
+        String sessionId = accessor.getSessionId();
+        String clientId = resolveClientId(accessor);
+        roomService.addSession(roomId, sessionId, clientId);
 
         // Send this user's own session ID so the frontend can filter self-cursor
-        messaging.convertAndSendToUser(principal, "/queue/session", principal);
+        messaging.convertAndSendToUser(clientId, "/queue/session", clientId);
 
         // Send canvas history only to the joining user
         List<DrawSegment> history = roomService.getHistory(roomId);
-        messaging.convertAndSendToUser(principal, "/queue/canvas-state", history);
+        messaging.convertAndSendToUser(clientId, "/queue/canvas-state", history);
+        messaging.convertAndSend("/topic/room/" + roomId + "/state", history);
 
         // Broadcast updated user count to everyone in the room
         messaging.convertAndSend("/topic/room/" + roomId + "/users", roomService.getUserCount(roomId));
@@ -44,13 +47,14 @@ public class WhiteboardController {
     public void draw(@DestinationVariable String roomId, @Payload DrawSegment segment) {
         roomService.addToHistory(roomId, segment);
         messaging.convertAndSend("/topic/room/" + roomId + "/draw", segment);
+        messaging.convertAndSend("/topic/room/" + roomId + "/state", roomService.getHistory(roomId));
     }
 
     @MessageMapping("/room/{roomId}/cursor")
     public void cursor(@DestinationVariable String roomId,
                        @Payload CursorMessage cursor,
                        SimpMessageHeaderAccessor accessor) {
-        cursor.setSessionId(accessor.getUser().getName());
+        cursor.setSessionId(resolveClientId(accessor));
         messaging.convertAndSend("/topic/room/" + roomId + "/cursor", cursor);
     }
 
@@ -58,16 +62,29 @@ public class WhiteboardController {
     public void clear(@DestinationVariable String roomId) {
         roomService.clearHistory(roomId);
         messaging.convertAndSend("/topic/room/" + roomId + "/clear", "");
+        messaging.convertAndSend("/topic/room/" + roomId + "/state", roomService.getHistory(roomId));
     }
 
     @EventListener
     public void handleDisconnect(SessionDisconnectEvent event) {
-        if (event.getUser() == null) return;
-        String principal = event.getUser().getName();
-        String roomId = roomService.removeSession(principal);
-        if (roomId == null) return;
+        StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
+        String sessionId = accessor.getSessionId();
+        if (sessionId == null) return;
 
-        messaging.convertAndSend("/topic/room/" + roomId + "/cursor-leave", principal);
-        messaging.convertAndSend("/topic/room/" + roomId + "/users", roomService.getUserCount(roomId));
+        RoomService.SessionInfo sessionInfo = roomService.removeSession(sessionId);
+        if (sessionInfo == null) return;
+
+        messaging.convertAndSend("/topic/room/" + sessionInfo.getRoomId() + "/cursor-leave", sessionInfo.getClientId());
+        messaging.convertAndSend("/topic/room/" + sessionInfo.getRoomId() + "/users", roomService.getUserCount(sessionInfo.getRoomId()));
+    }
+
+    private String resolveClientId(SimpMessageHeaderAccessor accessor) {
+        if (accessor.getUser() != null && accessor.getUser().getName() != null) {
+            return accessor.getUser().getName();
+        }
+        if (accessor.getSessionId() != null) {
+            return accessor.getSessionId();
+        }
+        return "unknown-session";
     }
 }
