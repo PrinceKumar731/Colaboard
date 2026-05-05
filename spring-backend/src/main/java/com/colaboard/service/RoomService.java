@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class RoomService {
@@ -18,9 +19,13 @@ public class RoomService {
 
     // roomId -> set of websocket sessionIds
     private final Map<String, Set<String>> roomSessions = new ConcurrentHashMap<>();
+    private final Map<String, AtomicInteger> roomNameCounters = new ConcurrentHashMap<>();
 
     public void addSession(String roomId, String sessionId, String clientId) {
-        sessions.put(sessionId, new SessionInfo(roomId, clientId));
+        String displayName = "User " + roomNameCounters
+                .computeIfAbsent(roomId, key -> new AtomicInteger(0))
+                .incrementAndGet();
+        sessions.put(sessionId, new SessionInfo(roomId, clientId, displayName));
         roomSessions.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet()).add(sessionId);
         roomHistory.computeIfAbsent(roomId, k -> new CopyOnWriteArrayList<>());
     }
@@ -64,10 +69,12 @@ public class RoomService {
     public static class SessionInfo {
         private final String roomId;
         private final String clientId;
+        private final String displayName;
 
-        public SessionInfo(String roomId, String clientId) {
+        public SessionInfo(String roomId, String clientId, String displayName) {
             this.roomId = roomId;
             this.clientId = clientId;
+            this.displayName = displayName;
         }
 
         public String getRoomId() {
@@ -76,6 +83,10 @@ public class RoomService {
 
         public String getClientId() {
             return clientId;
+        }
+
+        public String getDisplayName() {
+            return displayName;
         }
     }
 }

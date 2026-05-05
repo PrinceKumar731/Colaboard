@@ -50,177 +50,24 @@ button {
   cursor: pointer;
 }
 
-.landing-shell {
+.board-shell {
   position: relative;
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  padding: 24px;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
 }
 
-.landing-noise {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(23, 32, 51, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(23, 32, 51, 0.03) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: radial-gradient(circle at center, black 45%, transparent 100%);
-}
-
-.hero-panel {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
-  gap: 28px;
-  width: min(1100px, 100%);
-  padding: 40px;
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  border-radius: 32px;
-  background: rgba(255, 253, 248, 0.82);
-  backdrop-filter: blur(16px);
-  box-shadow: var(--panel-shadow);
-}
-
-.hero-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.eyebrow {
-  width: fit-content;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: var(--accent-soft);
-  color: var(--accent-deep);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.hero-copy h1 {
-  margin: 0;
-  max-width: 10ch;
-  font-size: clamp(3rem, 7vw, 5.3rem);
-  line-height: 0.92;
-  letter-spacing: -0.05em;
-}
-
-.hero-copy p {
-  margin: 0;
-  max-width: 58ch;
-  color: rgba(23, 32, 51, 0.72);
-  font-size: 1.05rem;
-  line-height: 1.7;
-}
-
-.hero-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 8px;
-}
-
-.primary-cta {
-  min-width: 180px;
-  padding: 16px 22px;
-  border: none;
-  border-radius: 18px;
-  background: linear-gradient(135deg, var(--accent) 0%, #ff9562 100%);
-  color: white;
-  font-size: 1rem;
-  font-weight: 700;
-  box-shadow: 0 16px 30px rgba(232, 93, 61, 0.22);
-}
-
-.join-room-form {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: min(100%, 420px);
-  padding: 10px;
-  border: 1px solid rgba(23, 32, 51, 0.1);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.9);
-}
-
-.join-room-form input {
-  flex: 1;
-  min-width: 0;
-  padding: 10px 12px;
-  border: none;
-  background: transparent;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  outline: none;
-}
-
-.join-room-form button {
-  padding: 12px 18px;
-  border: none;
-  border-radius: 14px;
-  background: #172033;
-  color: white;
-  font-weight: 700;
-}
-
-.hero-preview {
-  display: grid;
-  gap: 18px;
-}
-
-.preview-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 22px;
-  border: 1px solid rgba(23, 32, 51, 0.1);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 249, 240, 0.94));
-}
-
-.preview-card.sticky {
-  transform: rotate(-2deg);
-}
-
-.preview-label {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.preview-card strong {
-  font-size: 1.35rem;
-  line-height: 1.1;
-}
-
-.preview-card p {
-  margin: 0;
-  color: rgba(23, 32, 51, 0.72);
-  line-height: 1.65;
-}
-
-.board-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  padding: 12px;
-  gap: 10px;
-}
-
 .board-header {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 8;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 8px;
+  pointer-events: none;
 }
 
 .header-actions {
@@ -228,12 +75,14 @@ button {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  pointer-events: auto;
 }
 
 .board-header-left {
   display: flex;
   align-items: center;
   gap: 10px;
+  pointer-events: auto;
 }
 
 .header-icon-btn,
@@ -295,9 +144,8 @@ button {
 }
 
 .board-main {
-  position: relative;
-  flex: 1;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
 }
 
 .top-toolbar {
@@ -354,8 +202,8 @@ button {
 
 .style-dock {
   position: absolute;
-  top: 98px;
-  left: 10px;
+  top: 84px;
+  left: 12px;
   z-index: 5;
   width: 210px;
   display: grid;
@@ -447,19 +295,16 @@ button {
 }
 
 .canvas-stage-wrap {
-  height: 100%;
-  min-height: 0;
+  position: absolute;
+  inset: 0;
 }
 
 .canvas-stage {
   position: relative;
+  width: 100%;
   height: 100%;
-  min-height: calc(100vh - 76px);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 20px;
   overflow: hidden;
   background: linear-gradient(180deg, #fffdfa 0%, #fff8ec 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 .grid-layer {
@@ -540,6 +385,21 @@ button {
   border-radius: 14px 14px 14px 0;
   background: #2563eb;
   box-shadow: 0 8px 18px rgba(37, 99, 235, 0.28);
+}
+
+.remote-cursor label {
+  position: absolute;
+  top: 20px;
+  left: 2px;
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.95);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.18);
 }
 
 .modal-backdrop {
@@ -623,22 +483,27 @@ button {
   gap: 10px;
 }
 
+.join-modal-form {
+  display: grid;
+  gap: 14px;
+}
+
+.join-modal-form input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: white;
+  outline: none;
+}
+
 @media (max-width: 1024px) {
   body {
     overflow: auto;
   }
 
-  .hero-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .board-shell {
-    padding: 12px;
-  }
-
   .board-main {
-    display: grid;
-    gap: 12px;
+    position: absolute;
   }
 
   .top-toolbar,
@@ -654,7 +519,7 @@ button {
   }
 
   .canvas-stage {
-    min-height: 70vh;
+    min-height: 100vh;
   }
 
   .canvas-topbar {
@@ -667,28 +532,10 @@ button {
 }
 
 @media (max-width: 640px) {
-  .landing-shell {
-    padding: 14px;
-  }
-
-  .hero-panel {
-    padding: 22px;
-    border-radius: 24px;
-  }
-
-  .hero-copy h1 {
-    max-width: none;
-    font-size: 2.7rem;
-  }
-
-  .join-room-form {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .board-header {
-    padding: 0;
+    top: 10px;
+    left: 10px;
+    right: 10px;
   }
 
   .share-modal-actions {

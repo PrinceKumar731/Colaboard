@@ -24,7 +24,7 @@ function createWsUrl() {
   return url.toString();
 }
 
-export default function Whiteboard({ roomId }) {
+export default function Whiteboard({ roomId, onJoinRoom }) {
   const canvasRef = useRef(null);
   const canvasAreaRef = useRef(null);
   const stompRef = useRef(null);
@@ -36,6 +36,7 @@ export default function Whiteboard({ roomId }) {
   const isPanningRef = useRef(false);
   const panOriginRef = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
   const mySessionRef = useRef(null);
+  const myIdentityRef = useRef(null);
   const viewportRef = useRef(DEFAULT_VIEWPORT);
   const spacePressedRef = useRef(false);
 
@@ -47,6 +48,8 @@ export default function Whiteboard({ roomId }) {
   const [cursors, setCursors] = useState({});
   const [copied, setCopied] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [joinInput, setJoinInput] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
@@ -111,6 +114,10 @@ export default function Whiteboard({ roomId }) {
           mySessionRef.current = message.body;
         });
 
+        client.subscribe('/user/queue/identity', (message) => {
+          myIdentityRef.current = JSON.parse(message.body);
+        });
+
         client.subscribe('/user/queue/canvas-state', (message) => {
           elementsRef.current = JSON.parse(message.body);
           renderScene(null);
@@ -129,9 +136,15 @@ export default function Whiteboard({ roomId }) {
         });
 
         client.subscribe(`/topic/room/${roomId}/cursor`, (message) => {
-          const { sessionId, x, y } = JSON.parse(message.body);
-          if (sessionId === mySessionRef.current) return;
-          setCursors((current) => ({ ...current, [sessionId]: { x, y } }));
+          const { sessionId, displayName, x, y } = JSON.parse(message.body);
+          if (
+            sessionId === mySessionRef.current ||
+            sessionId === myIdentityRef.current?.clientId ||
+            displayName === myIdentityRef.current?.displayName
+          ) {
+            return;
+          }
+          setCursors((current) => ({ ...current, [sessionId]: { x, y, displayName } }));
         });
 
         client.subscribe(`/topic/room/${roomId}/cursor-leave`, (message) => {
@@ -163,7 +176,10 @@ export default function Whiteboard({ roomId }) {
     client.activate();
     stompRef.current = client;
 
-    return () => client.deactivate();
+    return () => {
+      setCursors({});
+      client.deactivate();
+    };
   }, [renderScene, roomId]);
 
   useEffect(() => {
@@ -427,6 +443,15 @@ export default function Whiteboard({ roomId }) {
     window.setTimeout(() => setCopied(false), 1800);
   };
 
+  const handleJoinSubmit = (event) => {
+    event.preventDefault();
+    if (onJoinRoom?.(joinInput)) {
+      setJoinOpen(false);
+      setJoinInput('');
+      setCopied(false);
+    }
+  };
+
   const centerViewport = () => {
     updateViewport(DEFAULT_VIEWPORT);
   };
@@ -454,6 +479,9 @@ export default function Whiteboard({ roomId }) {
 
         <div className="header-actions">
           <div className={`status-dot${connected ? ' online' : ''}`} title={connected ? 'Live sync on' : 'Connecting'} />
+          <button type="button" className="ghost-btn" onClick={() => setJoinOpen(true)}>
+            Join
+          </button>
           <button type="button" className="ghost-btn" onClick={handleExport}>
             Download
           </button>
@@ -520,6 +548,7 @@ export default function Whiteboard({ roomId }) {
                 style={toScreenPosition(position)}
               >
                 <span />
+                <label>{position.displayName || 'User'}</label>
               </div>
             ))}
           </div>
@@ -568,6 +597,43 @@ export default function Whiteboard({ roomId }) {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {joinOpen && (
+        <div className="modal-backdrop" onClick={() => setJoinOpen(false)}>
+          <div className="share-modal join-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="share-modal-head">
+              <div>
+                <h2>Join a live session</h2>
+                <p>Paste a room code or full invite link to enter an existing collaboration.</p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setJoinOpen(false)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="join-modal-form" onSubmit={handleJoinSubmit}>
+              <input
+                value={joinInput}
+                onChange={(event) => setJoinInput(event.target.value)}
+                placeholder="Enter room code or invite link"
+                spellCheck={false}
+                autoFocus
+              />
+              <div className="share-modal-actions">
+                <button type="submit" className="share-btn primary">Join room</button>
+                <button type="button" className="ghost-btn" onClick={() => setJoinOpen(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

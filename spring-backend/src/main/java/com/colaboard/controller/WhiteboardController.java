@@ -14,6 +14,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 import org.springframework.web.socket.messaging.StompHeaderAccessor;
 
+import java.util.Map;
 import java.util.List;
 
 @Controller
@@ -30,9 +31,14 @@ public class WhiteboardController {
         String sessionId = accessor.getSessionId();
         String clientId = resolveClientId(accessor);
         roomService.addSession(roomId, sessionId, clientId);
+        RoomService.SessionInfo sessionInfo = roomService.getSessionInfo(sessionId);
 
         // Send this user's own session ID so the frontend can filter self-cursor
         messaging.convertAndSendToUser(clientId, "/queue/session", clientId);
+        messaging.convertAndSendToUser(clientId, "/queue/identity", Map.of(
+                "clientId", clientId,
+                "displayName", sessionInfo != null ? sessionInfo.getDisplayName() : "User"
+        ));
 
         // Send canvas history only to the joining user
         List<DrawSegment> history = roomService.getHistory(roomId);
@@ -54,7 +60,10 @@ public class WhiteboardController {
     public void cursor(@DestinationVariable String roomId,
                        @Payload CursorMessage cursor,
                        SimpMessageHeaderAccessor accessor) {
+        String sessionId = accessor.getSessionId();
+        RoomService.SessionInfo sessionInfo = sessionId != null ? roomService.getSessionInfo(sessionId) : null;
         cursor.setSessionId(resolveClientId(accessor));
+        cursor.setDisplayName(sessionInfo != null ? sessionInfo.getDisplayName() : "User");
         messaging.convertAndSend("/topic/room/" + roomId + "/cursor", cursor);
     }
 

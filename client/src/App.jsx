@@ -18,80 +18,33 @@ function resolveRoomInput(value) {
 }
 
 export default function App() {
-  const [activeRoom, setActiveRoom] = useState(null);
-  const [joinInput, setJoinInput] = useState('');
+  const [activeRoom, setActiveRoom] = useState('');
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const room = params.get('room');
-    if (room) setActiveRoom(resolveRoomInput(room));
+    const url = new URL(window.location.href);
+    const existingRoom = resolveRoomInput(url.searchParams.get('room') ?? '');
+    const roomId = existingRoom || randomRoomId();
+
+    if (!existingRoom) {
+      url.searchParams.set('room', roomId);
+      window.history.replaceState({}, '', url);
+    }
+
+    setActiveRoom(roomId);
   }, []);
 
   const enterRoom = (roomId) => {
     const nextRoomId = resolveRoomInput(roomId);
-    if (!nextRoomId) return;
+    if (!nextRoomId) return false;
+
     const url = new URL(window.location.href);
     url.searchParams.set('room', nextRoomId);
     window.history.pushState({}, '', url);
     setActiveRoom(nextRoomId);
+    return true;
   };
 
-  const handleCreate = () => enterRoom(randomRoomId());
+  if (!activeRoom) return null;
 
-  const handleJoin = (event) => {
-    event.preventDefault();
-    const roomId = resolveRoomInput(joinInput);
-    if (roomId) enterRoom(roomId);
-  };
-
-  if (activeRoom) {
-    return <Whiteboard roomId={activeRoom} />;
-  }
-
-  return (
-    <div className="landing-shell">
-      <div className="landing-noise" />
-      <section className="hero-panel">
-        <div className="hero-copy">
-          <span className="eyebrow">Collaborative whiteboard</span>
-          <h1>Turn this board into your team&apos;s live sketch room.</h1>
-          <p>
-            Fast room sharing, Excalidraw-inspired tools, and real-time collaboration on a
-            spacious canvas made for rough ideas.
-          </p>
-
-          <div className="hero-actions">
-            <button type="button" className="primary-cta" onClick={handleCreate}>
-              Create room
-            </button>
-            <form className="join-room-form" onSubmit={handleJoin}>
-              <input
-                value={joinInput}
-                onChange={(event) => setJoinInput(event.target.value)}
-                placeholder="Enter room code"
-                spellCheck={false}
-              />
-              <button type="submit">Join</button>
-            </form>
-          </div>
-        </div>
-
-        <div className="hero-preview">
-          <div className="preview-card sticky">
-            <span className="preview-label">Feels like</span>
-            <strong>Loose, visual, and collaborative</strong>
-            <p>
-              Pencil, arrows, rectangles, ellipses, diamonds, eraser, export, and room-level
-              sync all in one board.
-            </p>
-          </div>
-          <div className="preview-card">
-            <span className="preview-label">Best for</span>
-            <strong>Flows, architecture, notes, quick wireframes</strong>
-            <p>Share one link, jump into a room, and sketch together immediately.</p>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
+  return <Whiteboard roomId={activeRoom} onJoinRoom={enterRoom} />;
 }
