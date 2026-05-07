@@ -13,6 +13,10 @@ function createElementId() {
   return `el-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function createClientId() {
+  return `client-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function withAlpha(hex, alpha) {
   return `${hex}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
 }
@@ -35,8 +39,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   const isDrawingRef = useRef(false);
   const isPanningRef = useRef(false);
   const panOriginRef = useRef({ x: 0, y: 0, startX: 0, startY: 0 });
-  const mySessionRef = useRef(null);
-  const myIdentityRef = useRef(null);
+  const clientIdRef = useRef(createClientId());
   const viewportRef = useRef(DEFAULT_VIEWPORT);
   const spacePressedRef = useRef(false);
 
@@ -104,24 +107,18 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   }, [resizeCanvas]);
 
   useEffect(() => {
+    elementsRef.current = [];
+    draftRef.current = null;
+    setCursors({});
+    setUserCount(1);
+    setConnected(false);
+    renderScene(null);
+
     const client = new Client({
       brokerURL: createWsUrl(),
       reconnectDelay: 3000,
       onConnect: () => {
         setConnected(true);
-
-        client.subscribe('/user/queue/session', (message) => {
-          mySessionRef.current = message.body;
-        });
-
-        client.subscribe('/user/queue/identity', (message) => {
-          myIdentityRef.current = JSON.parse(message.body);
-        });
-
-        client.subscribe('/user/queue/canvas-state', (message) => {
-          elementsRef.current = JSON.parse(message.body);
-          renderScene(null);
-        });
 
         client.subscribe(`/topic/room/${roomId}/state`, (message) => {
           elementsRef.current = JSON.parse(message.body);
@@ -137,11 +134,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
         client.subscribe(`/topic/room/${roomId}/cursor`, (message) => {
           const { sessionId, displayName, x, y } = JSON.parse(message.body);
-          if (
-            sessionId === mySessionRef.current ||
-            sessionId === myIdentityRef.current?.clientId ||
-            displayName === myIdentityRef.current?.displayName
-          ) {
+          if (sessionId === clientIdRef.current) {
             return;
           }
           setCursors((current) => ({ ...current, [sessionId]: { x, y, displayName } }));
@@ -166,11 +159,20 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
           renderScene(null);
         });
 
-        client.publish({ destination: `/app/room/${roomId}/join`, body: '' });
+        client.publish({
+          destination: `/app/room/${roomId}/join`,
+          body: JSON.stringify({ clientId: clientIdRef.current }),
+        });
       },
       onDisconnect: () => setConnected(false),
       onWebSocketClose: () => setConnected(false),
-      onStompError: (frame) => console.error('STOMP error', frame),
+      onStompError: (frame) => {
+        console.error('STOMP error', {
+          message: frame.headers?.message,
+          body: frame.body,
+          frame,
+        });
+      },
     });
 
     client.activate();
@@ -398,7 +400,9 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   };
 
   const handleWheel = (event) => {
-    event.preventDefault();
+    if (event.cancelable) {
+      event.preventDefault();
+    }
 
     if (event.ctrlKey || event.metaKey) {
       zoomAtPoint(event.clientX, event.clientY, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);

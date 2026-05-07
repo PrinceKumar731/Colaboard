@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run spring\" \"npm run dev --prefix client\"",
+    "redis:up": "docker compose -f docker-compose.redis.yml up -d",
+    "redis:down": "docker compose -f docker-compose.redis.yml down",
     "spring": "cd spring-backend && mvn spring-boot:run -q",
     "dev:node": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "install:all": "npm install && npm install --prefix server && npm install --prefix client",

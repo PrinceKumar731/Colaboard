@@ -2,58 +2,49 @@ package com.colaboard.controller;
 
 import com.colaboard.model.CursorMessage;
 import com.colaboard.model.DrawSegment;
+import com.colaboard.model.JoinRoomMessage;
+import com.colaboard.security.WebSocketUserPrincipal;
 import com.colaboard.service.RoomService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
+import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
-import org.springframework.web.socket.messaging.StompHeaderAccessor;
-
-import java.util.Map;
-import java.util.List;
 
 @Controller
 public class WhiteboardController {
-
-    @Autowired
-    private SimpMessagingTemplate messaging;
+    private static final Logger logger = LoggerFactory.getLogger(WhiteboardController.class);
 
     @Autowired
     private RoomService roomService;
 
     @MessageMapping("/room/{roomId}/join")
-    public void join(@DestinationVariable String roomId, SimpMessageHeaderAccessor accessor) {
+    public void join(@DestinationVariable String roomId,
+                     @Payload(required = false) JoinRoomMessage joinMessage,
+                     SimpMessageHeaderAccessor accessor) {
         String sessionId = accessor.getSessionId();
-        String clientId = resolveClientId(accessor);
-        roomService.addSession(roomId, sessionId, clientId);
-        RoomService.SessionInfo sessionInfo = roomService.getSessionInfo(sessionId);
+        WebSocketUserPrincipal principal = requirePrincipal(accessor);
+        String clientId = joinMessage != null && joinMessage.getClientId() != null && !joinMessage.getClientId().isBlank()
+                ? joinMessage.getClientId()
+                : sessionId;
 
-        // Send this user's own session ID so the frontend can filter self-cursor
-        messaging.convertAndSendToUser(clientId, "/queue/session", clientId);
-        messaging.convertAndSendToUser(clientId, "/queue/identity", Map.of(
-                "clientId", clientId,
-                "displayName", sessionInfo != null ? sessionInfo.getDisplayName() : "User"
-        ));
-
-        // Send canvas history only to the joining user
-        List<DrawSegment> history = roomService.getHistory(roomId);
-        messaging.convertAndSendToUser(clientId, "/queue/canvas-state", history);
-        messaging.convertAndSend("/topic/room/" + roomId + "/state", history);
-
-        // Broadcast updated user count to everyone in the room
-        messaging.convertAndSend("/topic/room/" + roomId + "/users", roomService.getUserCount(roomId));
+        roomService.addSession(roomId, sessionId, clientId, principal.getDisplayName());
+        roomService.publishState(roomId);
+        roomService.publishUsers(roomId);
     }
 
     @MessageMapping("/room/{roomId}/draw")
     public void draw(@DestinationVariable String roomId, @Payload DrawSegment segment) {
         roomService.addToHistory(roomId, segment);
-        messaging.convertAndSend("/topic/room/" + roomId + "/draw", segment);
-        messaging.convertAndSend("/topic/room/" + roomId + "/state", roomService.getHistory(roomId));
+        roomService.publishDraw(roomId, segment);
+        roomService.publishState(roomId);
     }
 
     @MessageMapping("/room/{roomId}/cursor")
@@ -62,16 +53,16 @@ public class WhiteboardController {
                        SimpMessageHeaderAccessor accessor) {
         String sessionId = accessor.getSessionId();
         RoomService.SessionInfo sessionInfo = sessionId != null ? roomService.getSessionInfo(sessionId) : null;
-        cursor.setSessionId(resolveClientId(accessor));
+        cursor.setSessionId(sessionInfo != null ? sessionInfo.getClientId() : sessionId);
         cursor.setDisplayName(sessionInfo != null ? sessionInfo.getDisplayName() : "User");
-        messaging.convertAndSend("/topic/room/" + roomId + "/cursor", cursor);
+        roomService.publishCursor(roomId, cursor);
     }
 
     @MessageMapping("/room/{roomId}/clear")
     public void clear(@DestinationVariable String roomId) {
         roomService.clearHistory(roomId);
-        messaging.convertAndSend("/topic/room/" + roomId + "/clear", "");
-        messaging.convertAndSend("/topic/room/" + roomId + "/state", roomService.getHistory(roomId));
+        roomService.publishClear(roomId);
+        roomService.publishState(roomId);
     }
 
     @EventListener
@@ -83,17 +74,25 @@ public class WhiteboardController {
         RoomService.SessionInfo sessionInfo = roomService.removeSession(sessionId);
         if (sessionInfo == null) return;
 
-        messaging.convertAndSend("/topic/room/" + sessionInfo.getRoomId() + "/cursor-leave", sessionInfo.getClientId());
-        messaging.convertAndSend("/topic/room/" + sessionInfo.getRoomId() + "/users", roomService.getUserCount(sessionInfo.getRoomId()));
+        roomService.publishCursorLeave(sessionInfo.getRoomId(), sessionInfo.getClientId());
+        roomService.publishUsers(sessionInfo.getRoomId());
     }
 
-    private String resolveClientId(SimpMessageHeaderAccessor accessor) {
-        if (accessor.getUser() != null && accessor.getUser().getName() != null) {
-            return accessor.getUser().getName();
+    @MessageExceptionHandler
+    public void handleMessagingException(Exception exception) {
+        logger.error("Whiteboard websocket message failed", exception);
+    }
+
+    private WebSocketUserPrincipal requirePrincipal(SimpMessageHeaderAccessor accessor) {
+        if (accessor.getUser() instanceof WebSocketUserPrincipal principal) {
+            return principal;
         }
-        if (accessor.getSessionId() != null) {
-            return accessor.getSessionId();
-        }
-        return "unknown-session";
+        return new WebSocketUserPrincipal(
+                accessor.getSessionId(),
+                "anon-" + accessor.getSessionId(),
+                "guest@local",
+                "Guest",
+                "ANONYMOUS"
+        );
     }
 }
