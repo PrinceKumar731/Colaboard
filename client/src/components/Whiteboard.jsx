@@ -8,6 +8,7 @@ const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 1.12;
 const DEFAULT_VIEWPORT = { x: 260, y: 180, zoom: 1 };
+const CURSOR_SEND_INTERVAL_MS = 40;
 
 function createElementId() {
   return `el-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -22,6 +23,35 @@ function withAlpha(hex, alpha) {
 }
 
 function createWsUrl() {
+  const explicitWsUrl = import.meta.env.VITE_WS_URL;
+  if (explicitWsUrl) {
+    const url = new URL(explicitWsUrl);
+    url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
+    return url.toString();
+  }
+
+  const apiUrl = import.meta.env.VITE_API_URL;
+  if (apiUrl) {
+    const url = new URL(apiUrl);
+
+    // In local Vite dev, prefer the same-origin /ws endpoint so the dev proxy can
+    // forward websocket upgrades to Spring without hard-coding the backend host.
+    if (
+      window.location.hostname === 'localhost' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+    ) {
+      const proxyUrl = new URL('/ws', window.location.href);
+      proxyUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return proxyUrl.toString();
+    }
+
+    url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
+    url.pathname = '/ws';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const url = new URL('/ws', window.location.href);
   url.protocol = protocol;
@@ -42,6 +72,9 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   const clientIdRef = useRef(createClientId());
   const viewportRef = useRef(DEFAULT_VIEWPORT);
   const spacePressedRef = useRef(false);
+  const pendingCursorRef = useRef(null);
+  const cursorSendTimerRef = useRef(null);
+  const lastCursorSentAtRef = useRef(0);
 
   const [tool, setTool] = useState('pen');
   const [color, setColor] = useState('#1f2937');
@@ -51,6 +84,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   const [cursors, setCursors] = useState({});
   const [copied, setCopied] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [syncReady, setSyncReady] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [joinInput, setJoinInput] = useState('');
   const [shareOpen, setShareOpen] = useState(false);
@@ -109,20 +143,53 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   useEffect(() => {
     elementsRef.current = [];
     draftRef.current = null;
+    pendingCursorRef.current = null;
+    lastCursorSentAtRef.current = 0;
+    if (cursorSendTimerRef.current) {
+      window.clearTimeout(cursorSendTimerRef.current);
+      cursorSendTimerRef.current = null;
+    }
     setCursors({});
     setUserCount(1);
     setConnected(false);
+    setSyncReady(false);
     renderScene(null);
 
+    const brokerURL = createWsUrl();
     const client = new Client({
-      brokerURL: createWsUrl(),
+      brokerURL,
       reconnectDelay: 3000,
       onConnect: () => {
         setConnected(true);
+        console.info('STOMP connected', { brokerURL, roomId });
+
+        client.subscribe('/user/queue/session', (message) => {
+          try {
+            const payload = JSON.parse(message.body);
+            console.info('WebSocket session acknowledged', payload);
+          } catch {
+            console.info('WebSocket session acknowledged', { raw: message.body });
+          }
+          setSyncReady(true);
+        });
+
+        client.subscribe('/user/queue/canvas-state', (message) => {
+          const payload = JSON.parse(message.body);
+          elementsRef.current = Array.isArray(payload.elements) ? payload.elements : [];
+          renderScene(null);
+          console.info('Initial canvas state received', {
+            roomId: payload.roomId,
+            elementCount: elementsRef.current.length,
+          });
+        });
 
         client.subscribe(`/topic/room/${roomId}/state`, (message) => {
           elementsRef.current = JSON.parse(message.body);
           renderScene(null);
+          console.info('Room state update received', {
+            roomId,
+            elementCount: elementsRef.current.length,
+          });
         });
 
         client.subscribe(`/topic/room/${roomId}/draw`, (message) => {
@@ -130,6 +197,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
           if (elementsRef.current.some((item) => item.id === element.id)) return;
           elementsRef.current = [...elementsRef.current, element];
           renderScene(null);
+          console.info('Draw event received', { roomId, elementId: element.id });
         });
 
         client.subscribe(`/topic/room/${roomId}/cursor`, (message) => {
@@ -165,7 +233,21 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
         });
       },
       onDisconnect: () => setConnected(false),
-      onWebSocketClose: () => setConnected(false),
+      onWebSocketClose: (event) => {
+        setConnected(false);
+        setSyncReady(false);
+        console.warn('WebSocket closed', {
+          brokerURL,
+          code: event.code,
+          reason: event.reason,
+        });
+      },
+      onWebSocketError: (event) => {
+        console.error('WebSocket connection failed', {
+          brokerURL,
+          event,
+        });
+      },
       onStompError: (frame) => {
         console.error('STOMP error', {
           message: frame.headers?.message,
@@ -180,6 +262,11 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
     return () => {
       setCursors({});
+      pendingCursorRef.current = null;
+      if (cursorSendTimerRef.current) {
+        window.clearTimeout(cursorSendTimerRef.current);
+        cursorSendTimerRef.current = null;
+      }
       client.deactivate();
     };
   }, [renderScene, roomId]);
@@ -240,13 +327,45 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     };
   };
 
-  const publishCursor = (position) => {
+  const sendCursorNow = useCallback((position) => {
     if (!stompRef.current?.connected) return;
     stompRef.current.publish({
       destination: `/app/room/${roomId}/cursor`,
       body: JSON.stringify(position),
     });
-  };
+    lastCursorSentAtRef.current = Date.now();
+  }, [roomId]);
+
+  const flushPendingCursor = useCallback(() => {
+    cursorSendTimerRef.current = null;
+    if (!pendingCursorRef.current) return;
+
+    const position = pendingCursorRef.current;
+    pendingCursorRef.current = null;
+    sendCursorNow(position);
+  }, [sendCursorNow]);
+
+  const publishCursor = useCallback((position, { immediate = false } = {}) => {
+    if (!stompRef.current?.connected) return;
+
+    if (immediate) {
+      pendingCursorRef.current = null;
+      if (cursorSendTimerRef.current) {
+        window.clearTimeout(cursorSendTimerRef.current);
+        cursorSendTimerRef.current = null;
+      }
+      sendCursorNow(position);
+      return;
+    }
+
+    pendingCursorRef.current = position;
+    const elapsed = Date.now() - lastCursorSentAtRef.current;
+    const waitMs = Math.max(0, CURSOR_SEND_INTERVAL_MS - elapsed);
+
+    if (!cursorSendTimerRef.current) {
+      cursorSendTimerRef.current = window.setTimeout(flushPendingCursor, waitMs);
+    }
+  }, [flushPendingCursor, sendCursorNow]);
 
   const buildDraftElement = (position) => {
     const id = createElementId();
@@ -317,7 +436,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     const position = getWorldPosition(event);
     isDrawingRef.current = true;
     draftRef.current = buildDraftElement(position);
-    publishCursor(position);
+    publishCursor(position, { immediate: true });
     renderScene();
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -481,8 +600,11 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
           <div className="brand-chip">Colaboard</div>
         </div>
 
-        <div className="header-actions">
-          <div className={`status-dot${connected ? ' online' : ''}`} title={connected ? 'Live sync on' : 'Connecting'} />
+          <div className="header-actions">
+          <div
+            className={`status-dot${connected && syncReady ? ' online' : ''}`}
+            title={connected && syncReady ? 'Live sync on' : connected ? 'Sync starting' : 'Connecting'}
+          />
           <button type="button" className="ghost-btn" onClick={() => setJoinOpen(true)}>
             Join
           </button>
