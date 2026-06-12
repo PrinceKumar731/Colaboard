@@ -414,6 +414,47 @@ button {
   transform: scale(1.06);
 }
 
+.swatch-picker-wrapper {
+  width: 32px;
+  height: 32px;
+  border: 2.5px solid var(--accent);
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: white;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.swatch-picker-wrapper.active {
+  box-shadow: 0 0 0 3px rgba(255, 122, 89, 0.2);
+  transform: scale(1.06);
+}
+
+.swatch-picker {
+  width: 150%;
+  height: 150%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  appearance: none;
+  transform: scale(1.2);
+}
+
+.swatch-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.swatch-picker::-webkit-color-swatch {
+  border: none;
+}
+
+.swatch-picker::-moz-color-swatch {
+  border: none;
+}
+
 .choice-pill.compact {
   height: 34px;
   padding: 0 12px;

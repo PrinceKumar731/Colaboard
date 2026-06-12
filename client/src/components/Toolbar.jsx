@@ -135,6 +135,15 @@ export default function Toolbar({
                 title={swatch}
               />
             ))}
+            <div className={`swatch-picker-wrapper${!STROKE_COLORS.includes(color) ? ' active' : ''}`}>
+              <input
+                type="color"
+                className="swatch-picker"
+                value={color}
+                onChange={(e) => onColorChange(e.target.value)}
+                title="Custom color"
+              />
+            </div>
           </div>
         </div>
 
