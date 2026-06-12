@@ -1,14 +1,30 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Client } from '@stomp/stompjs';
-import Toolbar from './Toolbar';
-import { replayHistory } from '../utils/canvas';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Client } from "@stomp/stompjs";
+import Toolbar from "./Toolbar";
+import { replayHistory } from "../utils/canvas";
 
-const SHAPE_TOOLS = new Set(['line', 'arrow', 'rectangle', 'ellipse', 'diamond']);
-const MIN_ZOOM = 0.35;
+const SHAPE_TOOLS = new Set([
+  "line",
+  "arrow",
+  "rectangle",
+  "ellipse",
+  "diamond",
+]);
+const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 1.12;
 const DEFAULT_VIEWPORT = { x: 260, y: 180, zoom: 1 };
 const CURSOR_SEND_INTERVAL_MS = 40;
+const COLLABORATOR_COLORS = [
+  "#2563eb",
+  "#dc2626",
+  "#16a34a",
+  "#d97706",
+  "#7c3aed",
+  "#0891b2",
+  "#be123c",
+  "#4f46e5",
+];
 
 function createElementId() {
   return `el-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -19,14 +35,25 @@ function createClientId() {
 }
 
 function withAlpha(hex, alpha) {
-  return `${hex}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
+  return `${hex}${Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, "0")}`;
+}
+
+function getCollaboratorColor(id) {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash * 31 + id.charCodeAt(index)) % COLLABORATOR_COLORS.length;
+  }
+  return COLLABORATOR_COLORS[hash];
 }
 
 function createWsUrl() {
   const explicitWsUrl = import.meta.env.VITE_WS_URL;
   if (explicitWsUrl) {
     const url = new URL(explicitWsUrl);
-    url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
+    url.protocol =
+      url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
     return url.toString();
   }
 
@@ -37,23 +64,25 @@ function createWsUrl() {
     // In local Vite dev, prefer the same-origin /ws endpoint so the dev proxy can
     // forward websocket upgrades to Spring without hard-coding the backend host.
     if (
-      window.location.hostname === 'localhost' &&
-      (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+      window.location.hostname === "localhost" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1")
     ) {
-      const proxyUrl = new URL('/ws', window.location.href);
-      proxyUrl.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const proxyUrl = new URL("/ws", window.location.href);
+      proxyUrl.protocol =
+        window.location.protocol === "https:" ? "wss:" : "ws:";
       return proxyUrl.toString();
     }
 
-    url.protocol = url.protocol === 'https:' || url.protocol === 'wss:' ? 'wss:' : 'ws:';
-    url.pathname = '/ws';
-    url.search = '';
-    url.hash = '';
+    url.protocol =
+      url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
+    url.pathname = "/ws";
+    url.search = "";
+    url.hash = "";
     return url.toString();
   }
 
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = new URL('/ws', window.location.href);
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const url = new URL("/ws", window.location.href);
   url.protocol = protocol;
   return url.toString();
 }
@@ -76,9 +105,9 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   const cursorSendTimerRef = useRef(null);
   const lastCursorSentAtRef = useRef(0);
 
-  const [tool, setTool] = useState('pen');
-  const [color, setColor] = useState('#1f2937');
-  const [fillStyle, setFillStyle] = useState('transparent');
+  const [tool, setTool] = useState("pen");
+  const [color, setColor] = useState("#1f2937");
+  const [fillStyle, setFillStyle] = useState("transparent");
   const [lineWidth, setLineWidth] = useState(3);
   const [userCount, setUserCount] = useState(1);
   const [cursors, setCursors] = useState({});
@@ -86,7 +115,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   const [connected, setConnected] = useState(false);
   const [syncReady, setSyncReady] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
-  const [joinInput, setJoinInput] = useState('');
+  const [joinInput, setJoinInput] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
   const [isPanning, setIsPanning] = useState(false);
@@ -105,11 +134,14 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     replayHistory(ctx, elementsRef.current, previewElement);
   }, []);
 
-  const updateViewport = useCallback((nextViewport) => {
-    viewportRef.current = nextViewport;
-    setViewport(nextViewport);
-    renderScene();
-  }, [renderScene]);
+  const updateViewport = useCallback(
+    (nextViewport) => {
+      viewportRef.current = nextViewport;
+      setViewport(nextViewport);
+      renderScene();
+    },
+    [renderScene],
+  );
 
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -124,7 +156,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     canvas.style.width = `${container.clientWidth}px`;
     canvas.style.height = `${container.clientHeight}px`;
 
-    ctxRef.current = canvas.getContext('2d');
+    ctxRef.current = canvas.getContext("2d");
     renderScene();
   }, [renderScene]);
 
@@ -132,11 +164,11 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     resizeCanvas();
     const observer = new ResizeObserver(() => resizeCanvas());
     if (canvasAreaRef.current) observer.observe(canvasAreaRef.current);
-    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener("resize", resizeCanvas);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', resizeCanvas);
+      window.removeEventListener("resize", resizeCanvas);
     };
   }, [resizeCanvas]);
 
@@ -161,23 +193,27 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
       reconnectDelay: 3000,
       onConnect: () => {
         setConnected(true);
-        console.info('STOMP connected', { brokerURL, roomId });
+        console.info("STOMP connected", { brokerURL, roomId });
 
-        client.subscribe('/user/queue/session', (message) => {
+        client.subscribe("/user/queue/session", (message) => {
           try {
             const payload = JSON.parse(message.body);
-            console.info('WebSocket session acknowledged', payload);
+            console.info("WebSocket session acknowledged", payload);
           } catch {
-            console.info('WebSocket session acknowledged', { raw: message.body });
+            console.info("WebSocket session acknowledged", {
+              raw: message.body,
+            });
           }
           setSyncReady(true);
         });
 
-        client.subscribe('/user/queue/canvas-state', (message) => {
+        client.subscribe("/user/queue/canvas-state", (message) => {
           const payload = JSON.parse(message.body);
-          elementsRef.current = Array.isArray(payload.elements) ? payload.elements : [];
+          elementsRef.current = Array.isArray(payload.elements)
+            ? payload.elements
+            : [];
           renderScene(null);
-          console.info('Initial canvas state received', {
+          console.info("Initial canvas state received", {
             roomId: payload.roomId,
             elementCount: elementsRef.current.length,
           });
@@ -186,7 +222,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
         client.subscribe(`/topic/room/${roomId}/state`, (message) => {
           elementsRef.current = JSON.parse(message.body);
           renderScene(null);
-          console.info('Room state update received', {
+          console.info("Room state update received", {
             roomId,
             elementCount: elementsRef.current.length,
           });
@@ -194,10 +230,14 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
         client.subscribe(`/topic/room/${roomId}/draw`, (message) => {
           const element = JSON.parse(message.body);
-          if (elementsRef.current.some((item) => item.id === element.id)) return;
+          if (elementsRef.current.some((item) => item.id === element.id))
+            return;
           elementsRef.current = [...elementsRef.current, element];
           renderScene(null);
-          console.info('Draw event received', { roomId, elementId: element.id });
+          console.info("Draw event received", {
+            roomId,
+            elementId: element.id,
+          });
         });
 
         client.subscribe(`/topic/room/${roomId}/cursor`, (message) => {
@@ -205,7 +245,10 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
           if (sessionId === clientIdRef.current) {
             return;
           }
-          setCursors((current) => ({ ...current, [sessionId]: { x, y, displayName } }));
+          setCursors((current) => ({
+            ...current,
+            [sessionId]: { x, y, displayName },
+          }));
         });
 
         client.subscribe(`/topic/room/${roomId}/cursor-leave`, (message) => {
@@ -236,20 +279,20 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
       onWebSocketClose: (event) => {
         setConnected(false);
         setSyncReady(false);
-        console.warn('WebSocket closed', {
+        console.warn("WebSocket closed", {
           brokerURL,
           code: event.code,
           reason: event.reason,
         });
       },
       onWebSocketError: (event) => {
-        console.error('WebSocket connection failed', {
+        console.error("WebSocket connection failed", {
           brokerURL,
           event,
         });
       },
       onStompError: (frame) => {
-        console.error('STOMP error', {
+        console.error("STOMP error", {
           message: frame.headers?.message,
           body: frame.body,
           frame,
@@ -273,19 +316,19 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
   useEffect(() => {
     const keyMap = {
-      v: 'select',
-      p: 'pen',
-      l: 'line',
-      a: 'arrow',
-      r: 'rectangle',
-      e: 'ellipse',
-      d: 'diamond',
-      x: 'eraser',
+      v: "select",
+      p: "pen",
+      l: "line",
+      a: "arrow",
+      r: "rectangle",
+      e: "ellipse",
+      d: "diamond",
+      x: "eraser",
     };
 
     const onKeyDown = (event) => {
       if (event.target instanceof HTMLInputElement) return;
-      if (event.code === 'Space') {
+      if (event.code === "Space") {
         event.preventDefault();
         spacePressedRef.current = true;
         return;
@@ -296,18 +339,18 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     };
 
     const onKeyUp = (event) => {
-      if (event.code === 'Space') {
+      if (event.code === "Space") {
         spacePressedRef.current = false;
         setIsPanning(false);
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
 
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, []);
 
@@ -328,14 +371,17 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     };
   };
 
-  const sendCursorNow = useCallback((position) => {
-    if (!stompRef.current?.connected) return;
-    stompRef.current.publish({
-      destination: `/app/room/${roomId}/cursor`,
-      body: JSON.stringify(position),
-    });
-    lastCursorSentAtRef.current = Date.now();
-  }, [roomId]);
+  const sendCursorNow = useCallback(
+    (position) => {
+      if (!stompRef.current?.connected) return;
+      stompRef.current.publish({
+        destination: `/app/room/${roomId}/cursor`,
+        body: JSON.stringify(position),
+      });
+      lastCursorSentAtRef.current = Date.now();
+    },
+    [roomId],
+  );
 
   const flushPendingCursor = useCallback(() => {
     cursorSendTimerRef.current = null;
@@ -346,38 +392,45 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     sendCursorNow(position);
   }, [sendCursorNow]);
 
-  const publishCursor = useCallback((position, { immediate = false } = {}) => {
-    if (!stompRef.current?.connected) return;
+  const publishCursor = useCallback(
+    (position, { immediate = false } = {}) => {
+      if (!stompRef.current?.connected) return;
 
-    if (immediate) {
-      pendingCursorRef.current = null;
-      if (cursorSendTimerRef.current) {
-        window.clearTimeout(cursorSendTimerRef.current);
-        cursorSendTimerRef.current = null;
+      if (immediate) {
+        pendingCursorRef.current = null;
+        if (cursorSendTimerRef.current) {
+          window.clearTimeout(cursorSendTimerRef.current);
+          cursorSendTimerRef.current = null;
+        }
+        sendCursorNow(position);
+        return;
       }
-      sendCursorNow(position);
-      return;
-    }
 
-    pendingCursorRef.current = position;
-    const elapsed = Date.now() - lastCursorSentAtRef.current;
-    const waitMs = Math.max(0, CURSOR_SEND_INTERVAL_MS - elapsed);
+      pendingCursorRef.current = position;
+      const elapsed = Date.now() - lastCursorSentAtRef.current;
+      const waitMs = Math.max(0, CURSOR_SEND_INTERVAL_MS - elapsed);
 
-    if (!cursorSendTimerRef.current) {
-      cursorSendTimerRef.current = window.setTimeout(flushPendingCursor, waitMs);
-    }
-  }, [flushPendingCursor, sendCursorNow]);
+      if (!cursorSendTimerRef.current) {
+        cursorSendTimerRef.current = window.setTimeout(
+          flushPendingCursor,
+          waitMs,
+        );
+      }
+    },
+    [flushPendingCursor, sendCursorNow],
+  );
 
   const buildDraftElement = (position) => {
     const id = createElementId();
-    const fillColor = fillStyle === 'solid' && tool !== 'line' && tool !== 'arrow'
-      ? withAlpha(color, 0.18)
-      : null;
+    const fillColor =
+      fillStyle === "solid" && tool !== "line" && tool !== "arrow"
+        ? withAlpha(color, 0.18)
+        : null;
 
-    if (tool === 'pen' || tool === 'eraser') {
+    if (tool === "pen" || tool === "eraser") {
       return {
         id,
-        elementType: 'stroke',
+        elementType: "stroke",
         tool,
         color,
         lineWidth,
@@ -391,7 +444,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
     return {
       id,
-      elementType: 'shape',
+      elementType: "shape",
       tool,
       color,
       fillColor,
@@ -403,25 +456,33 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     };
   };
 
-  const zoomAtPoint = useCallback((clientX, clientY, factor) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const pointX = clientX - rect.left;
-    const pointY = clientY - rect.top;
-    const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, viewportRef.current.zoom * factor));
-    const worldX = (pointX - viewportRef.current.x) / viewportRef.current.zoom;
-    const worldY = (pointY - viewportRef.current.y) / viewportRef.current.zoom;
+  const zoomAtPoint = useCallback(
+    (clientX, clientY, factor) => {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const pointX = clientX - rect.left;
+      const pointY = clientY - rect.top;
+      const nextZoom = Math.min(
+        MAX_ZOOM,
+        Math.max(MIN_ZOOM, viewportRef.current.zoom * factor),
+      );
+      const worldX =
+        (pointX - viewportRef.current.x) / viewportRef.current.zoom;
+      const worldY =
+        (pointY - viewportRef.current.y) / viewportRef.current.zoom;
 
-    updateViewport({
-      zoom: nextZoom,
-      x: pointX - worldX * nextZoom,
-      y: pointY - worldY * nextZoom,
-    });
-  }, [updateViewport]);
+      updateViewport({
+        zoom: nextZoom,
+        x: pointX - worldX * nextZoom,
+        y: pointY - worldY * nextZoom,
+      });
+    },
+    [updateViewport],
+  );
 
   const handlePointerDown = (event) => {
     event.preventDefault();
 
-    if (event.button === 1 || spacePressedRef.current || tool === 'select') {
+    if (event.button === 1 || spacePressedRef.current || tool === "select") {
       isPanningRef.current = true;
       setIsPanning(true);
       panOriginRef.current = {
@@ -446,8 +507,12 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     if (isPanningRef.current) {
       updateViewport({
         ...viewportRef.current,
-        x: panOriginRef.current.startX + (event.clientX - panOriginRef.current.x),
-        y: panOriginRef.current.startY + (event.clientY - panOriginRef.current.y),
+        x:
+          panOriginRef.current.startX +
+          (event.clientX - panOriginRef.current.x),
+        y:
+          panOriginRef.current.startY +
+          (event.clientY - panOriginRef.current.y),
       });
       return;
     }
@@ -457,7 +522,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
     if (!isDrawingRef.current || !draftRef.current) return;
 
-    if (draftRef.current.elementType === 'stroke') {
+    if (draftRef.current.elementType === "stroke") {
       draftRef.current = {
         ...draftRef.current,
         endX: position.x,
@@ -482,7 +547,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     isDrawingRef.current = false;
 
     if (
-      finishedElement.elementType === 'stroke' &&
+      finishedElement.elementType === "stroke" &&
       (!finishedElement.points || finishedElement.points.length < 4)
     ) {
       renderScene(null);
@@ -525,7 +590,11 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     }
 
     if (event.ctrlKey || event.metaKey) {
-      zoomAtPoint(event.clientX, event.clientY, event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+      zoomAtPoint(
+        event.clientX,
+        event.clientY,
+        event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP,
+      );
       return;
     }
 
@@ -541,22 +610,25 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     draftRef.current = null;
     renderScene(null);
     if (stompRef.current?.connected) {
-      stompRef.current.publish({ destination: `/app/room/${roomId}/clear`, body: '' });
+      stompRef.current.publish({
+        destination: `/app/room/${roomId}/clear`,
+        body: "",
+      });
     }
   };
 
   const handleExport = () => {
     const canvas = canvasRef.current;
-    const exportCanvas = document.createElement('canvas');
+    const exportCanvas = document.createElement("canvas");
     exportCanvas.width = canvas.width;
     exportCanvas.height = canvas.height;
-    const exportCtx = exportCanvas.getContext('2d');
-    exportCtx.fillStyle = '#fff8ec';
+    const exportCtx = exportCanvas.getContext("2d");
+    exportCtx.fillStyle = "#fff8ec";
     exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
     exportCtx.drawImage(canvas, 0, 0);
 
-    const link = document.createElement('a');
-    link.href = exportCanvas.toDataURL('image/png');
+    const link = document.createElement("a");
+    link.href = exportCanvas.toDataURL("image/png");
     link.download = `colaboard-${roomId}.png`;
     link.click();
   };
@@ -571,7 +643,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
     event.preventDefault();
     if (onJoinRoom?.(joinInput)) {
       setJoinOpen(false);
-      setJoinInput('');
+      setJoinInput("");
       setCopied(false);
     }
   };
@@ -601,18 +673,32 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
           <div className="brand-chip">Colaboard</div>
         </div>
 
-          <div className="header-actions">
+        <div className="header-actions">
           <div
-            className={`status-dot${connected && syncReady ? ' online' : ''}`}
-            title={connected && syncReady ? 'Live sync on' : connected ? 'Sync starting' : 'Connecting'}
+            className={`status-dot${connected && syncReady ? " online" : ""}`}
+            title={
+              connected && syncReady
+                ? "Live sync on"
+                : connected
+                  ? "Sync starting"
+                  : "Connecting"
+            }
           />
-          <button type="button" className="ghost-btn" onClick={() => setJoinOpen(true)}>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => setJoinOpen(true)}
+          >
             Join
           </button>
           <button type="button" className="ghost-btn" onClick={handleExport}>
             Download
           </button>
-          <button type="button" className="share-btn" onClick={() => setShareOpen(true)}>
+          <button
+            type="button"
+            className="share-btn"
+            onClick={() => setShareOpen(true)}
+          >
             Share
           </button>
         </div>
@@ -635,10 +721,20 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
           <div className="canvas-stage" ref={canvasAreaRef}>
             <div className="canvas-topbar">
               <div className="viewport-controls">
-                <button type="button" onClick={() => stepZoom(-1)}>-</button>
+                <button type="button" onClick={() => stepZoom(-1)}>
+                  -
+                </button>
                 <strong>{Math.round(viewport.zoom * 100)}%</strong>
-                <button type="button" onClick={() => stepZoom(1)}>+</button>
-                <button type="button" className="viewport-reset" onClick={centerViewport}>Reset</button>
+                <button type="button" onClick={() => stepZoom(1)}>
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="viewport-reset"
+                  onClick={centerViewport}
+                >
+                  Reset
+                </button>
               </div>
             </div>
 
@@ -660,13 +756,14 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
               onPointerLeave={handlePointerUp}
               onWheel={handleWheel}
               style={{
-                cursor: isPanning || spacePressedRef.current
-                  ? 'grabbing'
-                  : tool === 'select'
-                    ? 'grab'
-                    : tool === 'eraser'
-                      ? 'cell'
-                      : 'crosshair',
+                cursor:
+                  isPanning || spacePressedRef.current
+                    ? "grabbing"
+                    : tool === "select"
+                      ? "grab"
+                      : tool === "eraser"
+                        ? "cell"
+                        : "crosshair",
               }}
             />
 
@@ -676,8 +773,14 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
                 className="remote-cursor"
                 style={toScreenPosition(position)}
               >
-                <span />
-                <label>{position.displayName || 'User'}</label>
+                <span style={{ "--cursor-color": getCollaboratorColor(id) }}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 3l15 10.2-7.2 1.1-3.8 6.2L4 3z" />
+                  </svg>
+                </span>
+                <label style={{ "--cursor-color": getCollaboratorColor(id) }}>
+                  {position.displayName || "Guest"}
+                </label>
               </div>
             ))}
           </div>
@@ -686,7 +789,10 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
       {shareOpen && (
         <div className="modal-backdrop" onClick={() => setShareOpen(false)}>
-          <div className="share-modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="share-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="share-modal-head">
               <div>
                 <h2>Start a live session</h2>
@@ -705,7 +811,9 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
             <div className="share-room-badge">
               <span>Room</span>
               <strong>{roomId}</strong>
-              <em>{userCount} collaborator{userCount === 1 ? '' : 's'}</em>
+              <em>
+                {userCount} collaborator{userCount === 1 ? "" : "s"}
+              </em>
             </div>
 
             <div className="share-link-box">{window.location.href}</div>
@@ -716,7 +824,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
                 className="share-btn primary"
                 onClick={copyLink}
               >
-                {copied ? 'Copied' : 'Copy link'}
+                {copied ? "Copied" : "Copy link"}
               </button>
               <button
                 type="button"
@@ -732,11 +840,17 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
       {joinOpen && (
         <div className="modal-backdrop" onClick={() => setJoinOpen(false)}>
-          <div className="share-modal join-modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            className="share-modal join-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="share-modal-head">
               <div>
                 <h2>Join a live session</h2>
-                <p>Paste a room code or full invite link to enter an existing collaboration.</p>
+                <p>
+                  Paste a room code or full invite link to enter an existing
+                  collaboration.
+                </p>
               </div>
               <button
                 type="button"
@@ -757,8 +871,14 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
                 autoFocus
               />
               <div className="share-modal-actions">
-                <button type="submit" className="share-btn primary">Join room</button>
-                <button type="button" className="ghost-btn" onClick={() => setJoinOpen(false)}>
+                <button type="submit" className="share-btn primary">
+                  Join room
+                </button>
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  onClick={() => setJoinOpen(false)}
+                >
                   Cancel
                 </button>
               </div>
