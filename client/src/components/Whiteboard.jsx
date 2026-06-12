@@ -273,6 +273,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
 
   useEffect(() => {
     const keyMap = {
+      v: 'select',
       p: 'pen',
       l: 'line',
       a: 'arrow',
@@ -420,7 +421,7 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
   const handlePointerDown = (event) => {
     event.preventDefault();
 
-    if (event.button === 1 || spacePressedRef.current) {
+    if (event.button === 1 || spacePressedRef.current || tool === 'select') {
       isPanningRef.current = true;
       setIsPanning(true);
       panOriginRef.current = {
@@ -660,10 +661,12 @@ export default function Whiteboard({ roomId, onJoinRoom }) {
               onWheel={handleWheel}
               style={{
                 cursor: isPanning || spacePressedRef.current
-                  ? 'grab'
-                  : tool === 'eraser'
-                    ? 'cell'
-                    : 'crosshair',
+                  ? 'grabbing'
+                  : tool === 'select'
+                    ? 'grab'
+                    : tool === 'eraser'
+                      ? 'cell'
+                      : 'crosshair',
               }}
             />
 

@@ -1,6 +1,8 @@
 function withStyle(ctx, element, draw) {
   ctx.save();
-  ctx.lineWidth = element.lineWidth || 2;
+  ctx.lineWidth = element.tool === 'eraser'
+    ? (element.lineWidth || 2) * 2.5
+    : (element.lineWidth || 2);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   ctx.strokeStyle = element.color || '#1f2937';

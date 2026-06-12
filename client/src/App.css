@@ -339,18 +339,25 @@ button {
 }
 
 .icon-tool-glyph {
-  font-size: 1.35rem;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
   line-height: 1;
 }
 
+.icon-tool-glyph svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .icon-tool-shortcut {
-  position: absolute;
-  right: 6px;
-  bottom: 5px;
-  color: var(--muted);
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
+  display: none;
 }
 
 .style-dock {

@@ -64,7 +64,6 @@ public class WhiteboardController {
     public void draw(@DestinationVariable String roomId, @Payload DrawSegment segment) {
         roomService.addToHistory(roomId, segment);
         roomService.publishDraw(roomId, segment);
-        roomService.publishState(roomId);
     }
 
     @MessageMapping("/room/{roomId}/cursor")

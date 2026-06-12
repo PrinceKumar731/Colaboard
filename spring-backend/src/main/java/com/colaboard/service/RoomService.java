@@ -10,6 +10,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ public class RoomService {
     private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
     private final Map<String, List<DrawSegment>> localHistory = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> localParticipants = new ConcurrentHashMap<>();
+    private final Set<String> dirtyRooms = ConcurrentHashMap.newKeySet();
 
     public RoomService(StringRedisTemplate redisTemplate,
                        ObjectMapper objectMapper,
@@ -98,6 +100,7 @@ public class RoomService {
 
     public void addToHistory(String roomId, DrawSegment segment) {
         localHistory.computeIfAbsent(roomId, key -> Collections.synchronizedList(new ArrayList<>())).add(segment);
+        dirtyRooms.add(roomId);
         try {
             redisTemplate.opsForList().rightPush(roomHistoryKey(roomId), objectMapper.writeValueAsString(segment));
         } catch (JsonProcessingException exception) {
@@ -109,6 +112,7 @@ public class RoomService {
 
     public void clearHistory(String roomId) {
         localHistory.remove(roomId);
+        dirtyRooms.remove(roomId);
         try {
             redisTemplate.delete(roomHistoryKey(roomId));
         } catch (DataAccessException exception) {
@@ -149,6 +153,23 @@ public class RoomService {
 
     public void publishCursorLeave(String roomId, String clientId) {
         publish(roomId, "cursor_leave", clientId);
+    }
+
+    @Scheduled(fixedDelayString = "${app.room.state-sync-interval-ms:5000}")
+    public void publishDirtyRoomStates() {
+        List<String> roomsToSync = new ArrayList<>(dirtyRooms);
+        for (String roomId : roomsToSync) {
+            if (!dirtyRooms.remove(roomId)) {
+                continue;
+            }
+
+            try {
+                publishState(roomId);
+            } catch (RuntimeException exception) {
+                dirtyRooms.add(roomId);
+                logger.warn("Failed to publish scheduled room state sync for room {}", roomId, exception);
+            }
+        }
     }
 
     private void publish(String roomId, String type, Object payload) {
